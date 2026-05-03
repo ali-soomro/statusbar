@@ -42,5 +42,10 @@ cmake -B build -DCMAKE_INSTALL_PREFIX=/usr && cmake --build build && sudo cmake 
 - Qt5 → Qt6, KF5WindowSystem → KF6WindowSystem
 - Removed `Qt5::X11Extras` (replaced with `KF6::WindowSystem` + platform checks)
 
+## Known Issues / Wayland Limitations
+- App menu and active window tracking are X11-only (broken on Wayland)
+- Needs layer-shell implementation for proper docking (currently uses X11 struts)
+- System tray uses SNI (StatusNotifierItem) protocol via D-Bus — works on both X11 and Wayland
+
 ## Status
 ✅ Ported, built, installed, pushed (github.com/ali-soomro)

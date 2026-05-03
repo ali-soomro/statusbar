@@ -18,7 +18,8 @@
  */
 
 #include "controlcenterdialog.h"
-#include <KWindowSystem>
+#include <KX11Extras>
+#include <NETWM>
 
 ControlCenterDialog::ControlCenterDialog(QQuickWindow *parent)
     : QQuickWindow(parent)
@@ -39,7 +40,7 @@ bool ControlCenterDialog::eventFilter(QObject *object, QEvent *event)
 {
     if (event->type() == QEvent::MouseButtonPress) {
         if (QWindow *w = qobject_cast<QWindow*>(object)) {
-            if (!w->geometry().contains(static_cast<QMouseEvent*>(event)->globalPos())) {
+            if (!w->geometry().contains(static_cast<QMouseEvent*>(event)->globalPosition().toPoint())) {
                 ControlCenterDialog::setVisible(false);
             }
         }
@@ -49,7 +50,8 @@ bool ControlCenterDialog::eventFilter(QObject *object, QEvent *event)
             ControlCenterDialog::setVisible(false);
         }
     } else if (event->type() == QEvent::Show) {
-        KWindowSystem::setState(winId(), NET::SkipTaskbar | NET::SkipPager | NET::SkipSwitcher);
+        if (qGuiApp->platformName() == QLatin1String("xcb"))
+            KX11Extras::setState(winId(), NET::SkipTaskbar | NET::SkipPager | NET::SkipSwitcher);
     } else if (event->type() == QEvent::Hide) {
         setMouseGrabEnabled(false);
         setKeyboardGrabEnabled(false);

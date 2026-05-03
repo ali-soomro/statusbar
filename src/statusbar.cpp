@@ -33,6 +33,7 @@
 
 #include <NETWM>
 #include <KWindowSystem>
+#include <KX11Extras>
 #include <KWindowEffects>
 
 StatusBar::StatusBar(QQuickView *parent)
@@ -45,8 +46,10 @@ StatusBar::StatusBar(QQuickView *parent)
     setFlags(Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus);
     setColor(Qt::transparent);
 
-    KWindowSystem::setOnDesktop(winId(), NET::OnAllDesktops);
-    KWindowSystem::setType(winId(), NET::Dock);
+    if (qGuiApp->platformName() == QLatin1String("xcb")) {
+        KX11Extras::setOnDesktop(winId(), NET::OnAllDesktops);
+        KX11Extras::setType(winId(), NET::Dock);
+    }
 
     new StatusbarAdaptor(this);
     new AppMenu(this);
@@ -108,7 +111,7 @@ void StatusBar::updateGeometry()
     setGeometry(windowRect);
     updateViewStruts();
 
-    KWindowEffects::enableBlurBehind(winId(), true);
+    KWindowEffects::enableBlurBehind(this, true);
 }
 
 void StatusBar::updateViewStruts()
@@ -122,25 +125,20 @@ void StatusBar::updateViewStruts()
     strut.top_start = rect.x();
     strut.top_end = rect.x() + rect.width() - 1;
 
-    KWindowSystem::setExtendedStrut(winId(),
-                                 strut.left_width,
-                                 strut.left_start,
-                                 strut.left_end,
-                                 strut.right_width,
-                                 strut.right_start,
-                                 strut.right_end,
-                                 strut.top_width,
-                                 strut.top_start,
-                                 strut.top_end,
-                                 strut.bottom_width,
-                                 strut.bottom_start,
-                                 strut.bottom_end);
+    if (qGuiApp->platformName() == QLatin1String("xcb")) {
+        KX11Extras::setExtendedStrut(winId(),
+                                     strut.left_width, strut.left_start, strut.left_end,
+                                     strut.right_width, strut.right_start, strut.right_end,
+                                     strut.top_width, strut.top_start, strut.top_end,
+                                     strut.bottom_width, strut.bottom_start, strut.bottom_end);
+    }
 }
 
 void StatusBar::initState()
 {
     // Remain below the face launchpad.
-    KWindowSystem::setState(winId(), m_acticity->launchPad() ? NET::KeepBelow : NET::KeepAbove);
+    if (qGuiApp->platformName() == QLatin1String("xcb"))
+        KX11Extras::setState(winId(), m_acticity->launchPad() ? NET::KeepBelow : NET::KeepAbove);
 }
 
 void StatusBar::onPrimaryScreenChanged(QScreen *screen)

@@ -214,7 +214,7 @@ bool AppMenuApplet::eventFilter(QObject *watched, QEvent *event)
             return false;
         }
 
-        const QPointF &windowLocalPos = m_buttonGrid->window()->mapFromGlobal(e->globalPos());
+        const QPointF &windowLocalPos = m_buttonGrid->window()->mapFromGlobal(e->globalPosition().toPoint());
         const QPointF &buttonGridLocalPos = m_buttonGrid->mapFromScene(windowLocalPos);
 
         // Reduce the number of transmission signal.

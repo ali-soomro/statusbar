@@ -22,13 +22,17 @@
 #include <QFile>
 #include <QCursor>
 #include <QDebug>
-#include <QX11Info>
 #include <QDirIterator>
 #include <QSettings>
 #include <QRegularExpression>
+#include <QtGui/qguiapplication_platform.h>
 
 #include <NETWM>
 #include <KWindowSystem>
+#include <KX11Extras>
+#include <KWindowInfo>
+
+static bool isX11() { return qGuiApp->platformName() == QLatin1String("xcb"); }
 
 static const QStringList blockList = {"cutefish-launcher",
                                       "cutefish-statusbar"};
@@ -39,9 +43,11 @@ Activity::Activity(QObject *parent)
 {
     onActiveWindowChanged();
 
-    connect(KWindowSystem::self(), &KWindowSystem::activeWindowChanged, this, &Activity::onActiveWindowChanged);
-    connect(KWindowSystem::self(), static_cast<void (KWindowSystem::*)(WId id, NET::Properties properties, NET::Properties2 properties2)>(&KWindowSystem::windowChanged),
-            this, &Activity::onActiveWindowChanged);
+    if (isX11()) {
+        connect(KX11Extras::self(), &KX11Extras::activeWindowChanged, this, &Activity::onActiveWindowChanged);
+        connect(KX11Extras::self(), static_cast<void (KX11Extras::*)(WId, NET::Properties, NET::Properties2)>(&KX11Extras::windowChanged),
+                this, &Activity::onActiveWindowChanged);
+    }
 }
 
 bool Activity::launchPad() const
@@ -61,27 +67,30 @@ QString Activity::icon() const
 
 void Activity::close()
 {
-    NETRootInfo(QX11Info::connection(), NET::CloseWindow).closeWindowRequest(KWindowSystem::activeWindow());
+    if (!isX11()) return;
+    if (auto *x11app = qGuiApp->nativeInterface<QNativeInterface::QX11Application>())
+        NETRootInfo(x11app->connection(), NET::CloseWindow).closeWindowRequest(KX11Extras::activeWindow());
 }
 
 void Activity::minimize()
 {
-    KWindowSystem::minimizeWindow(KWindowSystem::activeWindow());
+    if (isX11()) KX11Extras::minimizeWindow(KX11Extras::activeWindow());
 }
 
 void Activity::restore()
 {
-    KWindowSystem::clearState(KWindowSystem::activeWindow(), NET::Max);
+    if (isX11()) KX11Extras::clearState(KX11Extras::activeWindow(), NET::Max);
 }
 
 void Activity::maximize()
 {
-    KWindowSystem::setState(KWindowSystem::activeWindow(), NET::Max);
+    if (isX11()) KX11Extras::setState(KX11Extras::activeWindow(), NET::Max);
 }
 
 void Activity::toggleMaximize()
 {
-    KWindowInfo info(KWindowSystem::activeWindow(), NET::WMState);
+    if (!isX11()) return;
+    KWindowInfo info(KX11Extras::activeWindow(), NET::WMState);
     bool isWindow = !info.hasState(NET::SkipTaskbar) ||
                      info.windowType(NET::UtilityMask) != NET::Utility ||
                      info.windowType(NET::DesktopMask) != NET::Desktop;
@@ -95,7 +104,8 @@ void Activity::toggleMaximize()
 
 void Activity::move()
 {
-    WId winId = KWindowSystem::activeWindow();
+    if (!isX11()) return;
+    WId winId = KX11Extras::activeWindow();
     KWindowInfo info(winId, NET::WMState | NET::WMGeometry | NET::WMDesktop);
     bool window = !info.hasState(NET::SkipTaskbar) ||
                      info.windowType(NET::UtilityMask) != NET::Utility ||
@@ -106,11 +116,13 @@ void Activity::move()
 
     bool onCurrent = info.isOnCurrentDesktop();
     if (!onCurrent) {
-        KWindowSystem::setCurrentDesktop(info.desktop());
-        KWindowSystem::forceActiveWindow(winId);
+        KX11Extras::setCurrentDesktop(info.desktop());
+        KX11Extras::forceActiveWindow(winId);
     }
 
-    NETRootInfo ri(QX11Info::connection(), NET::WMMoveResize);
+    auto *x11app = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
+    if (!x11app) return;
+    NETRootInfo ri(x11app->connection(), NET::WMMoveResize);
     ri.moveResizeRequest(winId,
                          QCursor::pos().x(),
                          QCursor::pos().y(), NET::Move);
@@ -140,7 +152,7 @@ bool Activity::isAcceptableWindow(quint64 wid)
 
     // WM_TRANSIENT_FOR hint not set - normal window
     WId transFor = info.transientFor();
-    if (transFor == 0 || transFor == wid || transFor == (WId) QX11Info::appRootWindow())
+    if (transFor == 0 || transFor == wid)
         return true;
 
     info = KWindowInfo(transFor, NET::WMWindowType);
@@ -155,7 +167,8 @@ bool Activity::isAcceptableWindow(quint64 wid)
 
 void Activity::onActiveWindowChanged()
 {
-    KWindowInfo info(KWindowSystem::activeWindow(),
+    if (!isX11()) return;
+    KWindowInfo info(KX11Extras::activeWindow(),
                      NET::WMState | NET::WMVisibleName | NET::WMWindowType,
                      NET::WM2WindowClass);
 
@@ -172,7 +185,7 @@ void Activity::onActiveWindowChanged()
         return;
     }
 
-    if (!isAcceptableWindow(KWindowSystem::activeWindow())
+    if (!isAcceptableWindow(KX11Extras::activeWindow())
             || blockList.contains(info.windowClassClass())) {
         clearTitle();
         clearIcon();

@@ -31,9 +31,9 @@
 #include <QGuiApplication>
 #include <QMenu>
 
-#include <QX11Info>
-
+#include <QtGui/qguiapplication_platform.h>
 #include <KWindowSystem>
+#include <KX11Extras>
 
 #include "../libdbusmenuqt/dbusmenuimporter.h"
 #include <QDebug>
@@ -42,7 +42,9 @@
 
 static QByteArray getWindowPropertyString(WId id, const QByteArray &name)
 {
-    xcb_connection_t *c = QX11Info::connection();
+    auto *x11app = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
+    if (!x11app) return QByteArray();
+    xcb_connection_t *c = x11app->connection();
     QByteArray value;
 
     const xcb_intern_atom_cookie_t atomCookie = xcb_intern_atom(c, false, name.length(), name.constData());
@@ -95,9 +97,12 @@ AppMenuModel::AppMenuModel(QObject *parent)
         }
     });
 
-    // Active window
-    connect(KWindowSystem::self(), &KWindowSystem::activeWindowChanged, this, &AppMenuModel::onActiveWindowChanged, Qt::QueuedConnection);
-    connect(KWindowSystem::self(), static_cast<void (KWindowSystem::*)(WId)>(&KWindowSystem::windowChanged), this, &AppMenuModel::onActiveWindowChanged, Qt::QueuedConnection);
+    // Active window (X11 only; no Wayland equivalent yet)
+    if (qGuiApp->platformName() == QLatin1String("xcb")) {
+        connect(KX11Extras::self(), &KX11Extras::activeWindowChanged, this, &AppMenuModel::onActiveWindowChanged, Qt::QueuedConnection);
+        connect(KX11Extras::self(), static_cast<void (KX11Extras::*)(WId, NET::Properties, NET::Properties2)>(&KX11Extras::windowChanged),
+                this, [this](WId) { onActiveWindowChanged(); }, Qt::QueuedConnection);
+    }
     onActiveWindowChanged();
 
     m_serviceWatcher->setConnection(QDBusConnection::sessionBus());
@@ -166,8 +171,9 @@ void AppMenuModel::onActiveWindowChanged()
 //    const QString objectPath = info.applicationMenuObjectPath();
 //    const QString serviceName = info.applicationMenuServiceName();
 
-    const QString objectPath = QString::fromUtf8(getWindowPropertyString(KWindowSystem::activeWindow(), "_KDE_NET_WM_APPMENU_OBJECT_PATH"));
-    const QString serviceName = QString::fromUtf8(getWindowPropertyString(KWindowSystem::activeWindow(), "_KDE_NET_WM_APPMENU_SERVICE_NAME"));
+    const WId activeWin = (qGuiApp->platformName() == QLatin1String("xcb")) ? KX11Extras::activeWindow() : 0;
+    const QString objectPath = QString::fromUtf8(getWindowPropertyString(activeWin, "_KDE_NET_WM_APPMENU_OBJECT_PATH"));
+    const QString serviceName = QString::fromUtf8(getWindowPropertyString(activeWin, "_KDE_NET_WM_APPMENU_SERVICE_NAME"));
 
     if (!objectPath.isEmpty() && !serviceName.isEmpty()) {
         setMenuAvailable(true);
